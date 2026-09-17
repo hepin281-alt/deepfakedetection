@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+.next/
+real-vs-fake/
+__pycache__/
+*.pth
+
