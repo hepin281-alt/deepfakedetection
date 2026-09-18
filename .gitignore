@@ -4,4 +4,5 @@ node_modules/
 real-vs-fake/
 __pycache__/
 *.pth
-
+.venv312/
+FaceForensics++_C23/

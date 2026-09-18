@@ -5,7 +5,10 @@ import torch.nn as nn
 
 class DeepfakeDetector:
     def __init__(self, model_path=None, device='cpu'):
-        self.device = device
+        # FORCE CPU for now: MPS has a known bug with AdaptiveAvgPool2d on EfficientNet
+        # that ignores the PYTORCH_ENABLE_MPS_FALLBACK=1 flag in some versions.
+        # CPU inference for a single image on Apple Silicon is extremely fast anyway.
+        self.device = 'cpu' 
         
         # For this prototype, we'll use a pre-trained EfficientNet from torchvision.
         # In a real scenario, you'd load weights fine-tuned on FaceForensics++ here.

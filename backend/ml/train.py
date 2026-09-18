@@ -1,10 +1,13 @@
 import os
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms, models
-from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+DataLoader = torch.utils.data.DataLoader
 
 # Construct path to dataset relative to this script's location
 DATASET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "real-vs-fake")

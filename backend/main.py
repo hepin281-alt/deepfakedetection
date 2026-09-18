@@ -1,4 +1,6 @@
 import os
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
 import shutil
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +30,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @app.get("/")
 def read_root():
     return {"message": "Deepfake Detection API is running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 @app.post("/analyze-image")
 async def analyze_image(file: UploadFile = File(...)):

@@ -2,6 +2,26 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+// ─── Theme Context ────────────────────────────────────────────────────────────
+function useTheme() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') as 'dark' | 'light' | null;
+    const t = saved ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    setTheme(t);
+    document.documentElement.setAttribute('data-theme', t);
+  }, []);
+  const toggle = useCallback(() => {
+    setTheme(t => {
+      const next = t === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+      return next;
+    });
+  }, []);
+  return { theme, toggle };
+}
+
 // ─── Particle Field ───────────────────────────────────────────────────────────
 function ParticleField() {
   const particles = Array.from({ length: 30 }, (_, i) => ({
@@ -16,6 +36,101 @@ function ParticleField() {
   );
 }
 
+// ─── Face Mesh Background ────────────────────────────────────────────────────
+function FaceMeshBg() {
+  // 68-point facial landmark layout in 200×240 viewBox
+  const jaw =       [[45,85],[40,105],[40,125],[44,145],[53,163],[65,175],[80,185],[100,190],[120,185],[135,175],[147,163],[156,145],[160,125],[160,105],[155,85]];
+  const rightBrow = [[60,68],[70,62],[82,58],[94,60],[102,64]];
+  const leftBrow  = [[98,64],[106,60],[118,58],[130,62],[140,68]];
+  const noseBridge= [[100,72],[100,88],[100,104],[100,118]];
+  const noseBot   = [[84,122],[92,128],[100,130],[108,128],[116,122]];
+  const rightEye  = [[62,86],[70,80],[80,78],[90,80],[90,88],[80,90],[70,90],[62,86]];
+  const leftEye   = [[110,80],[120,78],[130,80],[138,86],[130,90],[120,90],[110,88],[110,80]];
+  const outerLip  = [[74,148],[82,142],[91,138],[100,136],[109,138],[118,142],[126,148],[118,158],[109,162],[100,163],[91,162],[82,158],[74,148]];
+  const forehead  = [[60,48],[80,40],[100,38],[120,40],[140,48]];
+  const extras    = [[52,130],[148,130],[45,65],[155,65]];
+
+  const toPath = (pts: number[][]) => pts.map(([x,y]) => `${x},${y}`).join(' ');
+  const allPts = [...jaw,...rightBrow,...leftBrow,...noseBridge,...noseBot,...rightEye,...leftEye,...outerLip,...forehead,...extras];
+
+  // Extra triangulation lines for mesh look
+  const mesh: [number,number,number,number][] = [
+    [45,85,60,68],[155,85,140,68],[60,68,62,86],[102,64,90,80],[98,64,110,80],[140,68,138,86],
+    [62,86,44,145],[62,86,53,163],[138,86,147,163],[138,86,156,145],
+    [90,88,84,122],[110,88,116,122],[84,122,74,148],[116,122,126,148],[100,130,100,136],
+    [74,148,65,175],[126,148,135,175],[60,48,45,85],[140,48,155,85],[60,48,60,68],
+    [140,48,140,68],[80,40,70,62],[120,40,130,62],[100,38,100,72],
+    [40,105,62,86],[160,105,138,86],[52,130,62,86],[148,130,138,86],[52,130,53,163],[148,130,147,163],
+  ];
+
+  const faces = [
+    { left: '-8%',  top: '2%',  w: 480, anim: 'faceMeshPulse 8s ease-in-out infinite' },
+    { left: '58%',  top: '8%',  w: 320, anim: 'faceMeshPulse2 11s ease-in-out 3s infinite' },
+    { left: '30%',  top: '55%', w: 260, anim: 'faceMeshPulse2 9s ease-in-out 6s infinite reverse' },
+  ];
+
+  return (
+    <div className="face-mesh-bg" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      {faces.map((f, fi) => (
+        <svg key={fi} viewBox="0 0 200 240"
+          style={{ position: 'absolute', left: f.left, top: f.top, width: f.w, height: f.w * 1.2, animation: f.anim }}>
+          {/* Triangulation mesh lines */}
+          {mesh.map(([x1,y1,x2,y2], i) => (
+            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#06b6d4" strokeWidth="0.5" strokeOpacity="0.7" />
+          ))}
+          {/* Feature contours */}
+          <polyline points={toPath(jaw)}       fill="none" stroke="#06b6d4" strokeWidth="0.9" />
+          <polyline points={toPath(rightBrow)} fill="none" stroke="#8b5cf6" strokeWidth="0.8" />
+          <polyline points={toPath(leftBrow)}  fill="none" stroke="#8b5cf6" strokeWidth="0.8" />
+          <polyline points={toPath(noseBridge)}fill="none" stroke="#06b6d4" strokeWidth="0.6" />
+          <polyline points={toPath(noseBot)}   fill="none" stroke="#06b6d4" strokeWidth="0.6" />
+          <polyline points={toPath(rightEye)}  fill="none" stroke="#8b5cf6" strokeWidth="1" />
+          <polyline points={toPath(leftEye)}   fill="none" stroke="#8b5cf6" strokeWidth="1" />
+          <polyline points={toPath(outerLip)}  fill="none" stroke="#06b6d4" strokeWidth="0.7" />
+          <polyline points={toPath(forehead)}  fill="none" stroke="#06b6d4" strokeWidth="0.5" />
+          {/* Landmark dots */}
+          {allPts.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r="1.4" fill={i % 3 === 0 ? '#8b5cf6' : '#06b6d4'}
+              style={{ animation: `nodeBlink ${2 + (i % 4)}s ease-in-out ${(i * 0.15) % 3}s infinite` }} />
+          ))}
+          {/* Corner scan box */}
+          <path d="M20,15 L40,15 M20,15 L20,35" stroke="#06b6d4" strokeWidth="1.5" fill="none" strokeOpacity="0.8" />
+          <path d="M180,15 L160,15 M180,15 L180,35" stroke="#06b6d4" strokeWidth="1.5" fill="none" strokeOpacity="0.8" />
+          <path d="M20,225 L40,225 M20,225 L20,205" stroke="#06b6d4" strokeWidth="1.5" fill="none" strokeOpacity="0.8" />
+          <path d="M180,225 L160,225 M180,225 L180,205" stroke="#06b6d4" strokeWidth="1.5" fill="none" strokeOpacity="0.8" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+// ─── Glitch Overlay ───────────────────────────────────────────────────────────
+function GlitchOverlay() {
+  const strips = [
+    { top: '12%', h: 2, color: 'rgba(6,182,212,0.5)',  dur: '5s',  delay: '0s' },
+    { top: '34%', h: 3, color: 'rgba(244,63,94,0.4)',  dur: '7s',  delay: '1.8s' },
+    { top: '58%', h: 2, color: 'rgba(139,92,246,0.45)',dur: '4.5s',delay: '3.2s' },
+    { top: '72%', h: 4, color: 'rgba(6,182,212,0.3)',  dur: '6s',  delay: '0.9s' },
+    { top: '88%', h: 2, color: 'rgba(244,63,94,0.35)', dur: '8s',  delay: '4.5s' },
+  ];
+  return (
+    <div className="glitch-overlay" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      {strips.map((s, i) => (
+        <div key={i} style={{
+          position: 'absolute', left: 0, right: 0, top: s.top, height: s.h,
+          background: `linear-gradient(90deg, transparent 0%, ${s.color} 30%, ${s.color} 70%, transparent 100%)`,
+          transformOrigin: 'left center',
+          animation: `glitchStrip ${s.dur} ${s.delay} ease-in-out infinite`,
+          filter: 'blur(0.5px)',
+        }} />
+      ))}
+      {/* RGB chroma layers */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(244,63,94,0.04)', animation: 'chromaShiftR 7s 0s linear infinite', mixBlendMode: 'screen' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(6,182,212,0.04)',  animation: 'chromaShiftB 7s 1.5s linear infinite', mixBlendMode: 'screen' }} />
+    </div>
+  );
+}
+
 // ─── Background ───────────────────────────────────────────────────────────────
 function Background() {
   return (
@@ -26,16 +141,10 @@ function Background() {
       <div style={{ position: 'absolute', top: '30%', left: '35%', width: 550, height: 550, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.32) 0%, rgba(99,102,241,0.1) 45%, transparent 70%)', filter: 'blur(50px)', animation: 'orbDrift3 22s ease-in-out infinite' }} />
       <div style={{ position: 'absolute', top: '3%', right: '3%', width: 420, height: 420, borderRadius: '50%', background: 'radial-gradient(circle, rgba(244,63,94,0.3) 0%, rgba(244,63,94,0.08) 50%, transparent 70%)', filter: 'blur(42px)', animation: 'orbDrift2 26s ease-in-out infinite reverse' }} />
       <div style={{ position: 'absolute', bottom: '10%', left: '5%', width: 380, height: 380, borderRadius: '50%', background: 'radial-gradient(circle, rgba(20,184,166,0.3) 0%, rgba(20,184,166,0.08) 50%, transparent 70%)', filter: 'blur(46px)', animation: 'orbDrift1 30s ease-in-out infinite reverse' }} />
-      {[
-        { top: '4%', delay: '0s', dur: '1.8s', angle: -35 }, { top: '15%', delay: '3.2s', dur: '2.2s', angle: -25 },
-        { top: '7%', delay: '6.4s', dur: '1.6s', angle: -42 }, { top: '30%', delay: '1.6s', dur: '2.0s', angle: -28 },
-        { top: '52%', delay: '8.5s', dur: '1.9s', angle: -18 }, { top: '22%', delay: '4.8s', dur: '1.7s', angle: -50 },
-        { top: '63%', delay: '2.2s', dur: '2.3s', angle: -14 }, { top: '10%', delay: '11s', dur: '1.5s', angle: -38 },
-      ].map((s, i) => (
-        <div key={i} style={{ position: 'absolute', top: s.top, left: 0, right: 0, height: 2, transform: `rotate(${s.angle}deg)`, transformOrigin: '0% 50%', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, width: 350, height: 2, background: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.4) 25%, rgba(139,92,246,0.7) 60%, rgba(255,255,255,1) 88%, transparent 100%)', borderRadius: 999, boxShadow: '0 0 4px 1px rgba(255,255,255,0.95), 0 0 10px 3px rgba(6,182,212,1), 0 0 22px 5px rgba(139,92,246,0.6)', animation: `shootingStar ${s.dur} ${s.delay} ease-in infinite`, opacity: 0 }} />
-        </div>
-      ))}
+      {/* Face mesh — on-theme deepfake detection visual */}
+      <FaceMeshBg />
+      {/* Glitch strips — digital manipulation theme */}
+      <GlitchOverlay />
       <ParticleField />
     </div>
   );
@@ -45,6 +154,7 @@ function Background() {
 interface AnalysisResult { prediction: 'Real' | 'Fake'; fake_probability: number; faces_detected?: number; frames_analyzed?: number; }
 interface HistoryItem { id: number; filename: string; result: AnalysisResult; timestamp: Date; preview?: string; }
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+interface BatchItem { id: number; file: File; preview: string | null; result: AnalysisResult | null; loading: boolean; error: string | null; }
 
 // ─── Ripple helper ────────────────────────────────────────────────────────────
 function useRipple() {
@@ -120,9 +230,12 @@ function HealthDot() {
 }
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
-function Navbar() {
+function Navbar({ theme, toggleTheme, compareMode, setCompareMode }: {
+  theme: 'dark' | 'light'; toggleTheme: () => void;
+  compareMode: boolean; setCompareMode: (v: boolean) => void;
+}) {
   return (
-    <nav id="main-navbar" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, height: 60, background: 'rgba(3,3,10,0.08)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', padding: '0 24px', gap: 12 }}>
+    <nav id="main-navbar" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, height: 60, background: 'rgba(3,3,10,0.08)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', padding: '0 20px', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, rgba(6,182,212,0.3), rgba(139,92,246,0.3))', border: '1px solid rgba(6,182,212,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ShieldIcon style={{ width: 18, height: 18, color: '#06b6d4' }} />
@@ -131,7 +244,18 @@ function Navbar() {
       </div>
       <HealthDot />
       <div className="nav-badge" style={{ padding: '4px 10px', borderRadius: 999, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', fontSize: 11, fontWeight: 600, color: '#a78bfa' }}>⚡ EfficientNet B0</div>
-      <a href="https://github.com" target="_blank" rel="noopener noreferrer" id="github-link" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+      {/* Compare toggle */}
+      <button
+        onClick={() => setCompareMode(!compareMode)}
+        style={{ padding: '5px 12px', borderRadius: 8, background: compareMode ? 'rgba(6,182,212,0.15)' : 'rgba(255,255,255,0.04)', border: `1px solid ${compareMode ? 'rgba(6,182,212,0.4)' : 'rgba(255,255,255,0.08)'}`, color: compareMode ? 'var(--accent-cyan)' : 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+      >
+        ↔ Compare
+      </button>
+      {/* Theme toggle */}
+      <button className="theme-toggle" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
+      <a href="https://github.com/hepin281-alt/deepfakedetection" target="_blank" rel="noopener noreferrer" id="github-link" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
         <GitHubIcon style={{ width: 16, height: 16 }} />GitHub
       </a>
     </nav>
@@ -165,8 +289,10 @@ function StatsStrip() {
 // ─── Circular Gauge ───────────────────────────────────────────────────────────
 function CircularGauge({ probability, isFake }: { probability: number; isFake: boolean }) {
   const radius = 52; const circumference = 2 * Math.PI * radius;
-  const displayPct = isFake ? probability : 1 - probability;
+  const safeProb = isNaN(probability) ? 0 : probability;
+  const displayPct = isFake ? safeProb : 1 - safeProb;
   const color = isFake ? '#f43f5e' : '#10b981';
+  const offset = String(circumference * (1 - displayPct));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
       <Tip text={isFake ? 'Probability this media is AI-generated' : 'Probability this media is authentic'}>
@@ -174,7 +300,7 @@ function CircularGauge({ probability, isFake }: { probability: number; isFake: b
           <svg width="130" height="130" viewBox="0 0 130 130">
             <defs><filter id="gauge-glow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
             <circle cx="65" cy="65" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
-            <circle cx="65" cy="65" r={radius} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - displayPct)} transform="rotate(-90 65 65)" filter="url(#gauge-glow)" style={{ transition: 'stroke-dashoffset 1.4s cubic-bezier(0.4,0,0.2,1)' }} />
+            <circle cx="65" cy="65" r={radius} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray={String(circumference)} strokeDashoffset={offset} transform="rotate(-90 65 65)" filter="url(#gauge-glow)" style={{ transition: 'stroke-dashoffset 1.4s cubic-bezier(0.4,0,0.2,1)' }} />
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 26, fontWeight: 900, color, lineHeight: 1 }}><AnimatedNumber value={Math.round(displayPct * 100)} suffix="%" /></span>
@@ -357,6 +483,243 @@ function HistoryPanel({ history }: { history: HistoryItem[] }) {
   );
 }
 
+// ─── Batch Results Grid ───────────────────────────────────────────────────────
+function BatchResultsGrid({ items }: { items: BatchItem[] }) {
+  return (
+    <div className="batch-grid">
+      {items.map((item, idx) => {
+        const isFake = item.result?.prediction === 'Fake';
+        const delay = `${idx * 80}ms`;
+        return (
+          <div key={item.id} className="batch-card flip-in" style={{ animationDelay: delay }}>
+            {/* Thumbnail */}
+            <div style={{ height: 120, overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.03)' }}>
+              {item.preview
+                ? <img src={item.preview} alt={item.file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><VideoIcon style={{ width: 28, height: 28, color: 'var(--accent-purple)' }} /></div>
+              }
+              {item.loading && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(5,5,8,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(6,182,212,0.2)', borderTopColor: 'var(--accent-cyan)' }} className="animate-spin-slow" />
+                </div>
+              )}
+              {item.result && (
+                <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: isFake ? 'rgba(244,63,94,0.85)' : 'rgba(16,185,129,0.85)', color: 'white' }}>
+                  {isFake ? 'FAKE' : 'REAL'}
+                </div>
+              )}
+            </div>
+            {/* Info */}
+            <div style={{ padding: '10px 12px' }}>
+              <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 6 }}>{item.file.name}</p>
+              {item.result && (
+                <>
+                  <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 4 }}>
+                    <div style={{ height: '100%', borderRadius: 999, width: `${item.result.fake_probability * 100}%`, background: isFake ? 'linear-gradient(90deg,#f43f5e,#fb7185)' : 'linear-gradient(90deg,#10b981,#34d399)', transition: 'width 1s ease' }} />
+                  </div>
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>{(item.result.fake_probability * 100).toFixed(1)}% fake</p>
+                </>
+              )}
+              {item.error && <p style={{ fontSize: 10, color: '#f43f5e' }}>{item.error}</p>}
+              {item.loading && <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>Analyzing…</p>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Compare Panel ────────────────────────────────────────────────────────────
+function ComparePanel({ label, addToast }: { label: string; addToast: (msg: string, type: Toast['type']) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (f: File) => {
+    setFile(f); setResult(null); setError(null);
+    if (f.type.startsWith('image/')) { const r = new FileReader(); r.onload = e => setPreview(e.target?.result as string); r.readAsDataURL(f); }
+    else setPreview(null);
+  };
+
+  const analyze = async () => {
+    if (!file) return;
+    setLoading(true); setError(null);
+    const fd = new FormData(); fd.append('file', file);
+    const endpoint = file.type.startsWith('video/') ? 'http://localhost:8000/analyze-video' : 'http://localhost:8000/analyze-image';
+    try {
+      const res = await fetch(endpoint, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed');
+      if (data.status === 'error') throw new Error(data.message || 'Failed');
+      setResult(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error';
+      setError(msg); addToast(`${label}: ${msg}`, 'error');
+    } finally { setLoading(false); }
+  };
+
+  const isFake = result?.prediction === 'Fake';
+
+  return (
+    <div className="compare-panel">
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+      {!file ? (
+        <div
+          style={{ padding: '40px 20px', textAlign: 'center', cursor: 'pointer', border: isDragOver ? '2px dashed var(--accent-cyan)' : '2px dashed transparent', transition: 'all 0.2s' }}
+          onDrop={e => { e.preventDefault(); setIsDragOver(false); if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]); }}
+          onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+          onDragLeave={() => setIsDragOver(false)}
+          onClick={() => inputRef.current?.click()}
+        >
+          <input ref={inputRef} type="file" accept="image/*,video/*" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          <UploadIcon style={{ width: 32, height: 32, color: 'var(--accent-cyan)', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Drop or click to upload</p>
+        </div>
+      ) : (
+        <div>
+          {preview && (
+            <div style={{ position: 'relative', height: 180, overflow: 'hidden' }}>
+              <img src={preview} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {loading && <div style={{ position: 'absolute', inset: 0, background: 'rgba(5,5,8,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid rgba(6,182,212,0.2)', borderTopColor: 'var(--accent-cyan)' }} className="animate-spin-slow" /></div>}
+            </div>
+          )}
+          <div style={{ padding: '12px 16px' }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+            {result && (
+              <div className="flip-in" style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 22, fontWeight: 900, color: isFake ? 'var(--fake-color)' : 'var(--real-color)', marginBottom: 4 }}>{isFake ? '❌ FAKE' : '✅ REAL'}</p>
+                <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${result.fake_probability * 100}%`, borderRadius: 999, background: isFake ? 'linear-gradient(90deg,#f43f5e,#fb7185)' : 'linear-gradient(90deg,#10b981,#34d399)', transition: 'width 1.2s ease' }} />
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{(result.fake_probability * 100).toFixed(1)}% fake probability</p>
+              </div>
+            )}
+            {error && <p style={{ fontSize: 11, color: '#f43f5e', marginBottom: 8 }}>{error}</p>}
+            {!result && !loading && !error && (
+              <button onClick={analyze} style={{ width: '100%', padding: '8px', borderRadius: 8, background: 'linear-gradient(135deg,var(--accent-cyan),var(--accent-purple))', border: 'none', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Analyze</button>
+            )}
+            <button onClick={() => { setFile(null); setPreview(null); setResult(null); setError(null); }} style={{ width: '100%', marginTop: 6, padding: '6px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>Reset</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Compare Summary Banner ───────────────────────────────────────────────────
+// ─── PWA Install Banner ───────────────────────────────────────────────────────
+function PwaBanner() {
+  const [prompt, setPrompt] = useState<Event | null>(null);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const handler = (e: Event) => { e.preventDefault(); setPrompt(e); setShow(true); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+  if (!show) return null;
+  return (
+    <div className="pwa-banner">
+      <span style={{ fontSize: 22 }}>📱</span>
+      <div>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Install DeepfakeDetector</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Add to your home screen for quick access</p>
+      </div>
+      <button
+        onClick={async () => {
+          if (!prompt) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (prompt as any).prompt();
+          setShow(false);
+        }}
+        style={{ padding: '7px 16px', borderRadius: 8, background: 'linear-gradient(135deg,var(--accent-cyan),var(--accent-purple))', border: 'none', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+      >
+        Install
+      </button>
+      <button onClick={() => setShow(false)} style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>×</button>
+    </div>
+  );
+}
+
+// ─── Drag-to-Crop ─────────────────────────────────────────────────────────────
+function CropOverlay({ src, onCrop, onCancel }: { src: string; onCrop: (blob: Blob) => void; onCancel: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const startRef = useRef<{ x: number; y: number } | null>(null);
+
+  const getPos = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const cvs = canvasRef.current!;
+    const r = cvs.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  const draw = useCallback(() => {
+    const cvs = canvasRef.current; const img = imgRef.current;
+    if (!cvs || !img) return;
+    const ctx = cvs.getContext('2d')!;
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.drawImage(img, 0, 0, cvs.width, cvs.height);
+    if (rect && (rect.w !== 0 || rect.h !== 0)) {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, cvs.width, cvs.height);
+      ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    }
+  }, [rect]);
+
+  useEffect(() => { draw(); }, [draw]);
+
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => { const p = getPos(e); startRef.current = p; setDragging(true); setRect({ x: p.x, y: p.y, w: 0, h: 0 }); };
+  const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!dragging || !startRef.current) return;
+    const p = getPos(e);
+    setRect({ x: Math.min(p.x, startRef.current.x), y: Math.min(p.y, startRef.current.y), w: Math.abs(p.x - startRef.current.x), h: Math.abs(p.y - startRef.current.y) });
+  };
+  const onMouseUp = () => { setDragging(false); };
+
+  const cropAndSend = () => {
+    const cvs = canvasRef.current; const img = imgRef.current;
+    if (!cvs || !img || !rect || rect.w < 10 || rect.h < 10) return;
+    const scaleX = img.naturalWidth / cvs.width;
+    const scaleY = img.naturalHeight / cvs.height;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = rect.w * scaleX; offscreen.height = rect.h * scaleY;
+    const ctx = offscreen.getContext('2d')!;
+    ctx.drawImage(img, rect.x * scaleX, rect.y * scaleY, rect.w * scaleX, rect.h * scaleY, 0, 0, offscreen.width, offscreen.height);
+    offscreen.toBlob(blob => { if (blob) onCrop(blob); }, 'image/jpeg', 0.95);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 450, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <p style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>✂️ Draw a rectangle to select the region to analyze</p>
+      <div style={{ position: 'relative', maxWidth: '80vw', maxHeight: '65vh' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img ref={imgRef} src={src} alt="crop" style={{ display: 'none' }} onLoad={draw} />
+        <canvas
+          ref={canvasRef}
+          width={Math.min(600, typeof window !== 'undefined' ? Math.round(window.innerWidth * 0.78) : 600)}
+          height={Math.min(400, typeof window !== 'undefined' ? Math.round(window.innerHeight * 0.55) : 400)}
+          style={{ borderRadius: 12, cursor: 'crosshair', display: 'block', width: '100%', height: 'auto', maxWidth: '80vw' }}
+          onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onCancel} style={{ padding: '10px 24px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={cropAndSend} disabled={!rect || rect.w < 10} style={{ padding: '10px 24px', borderRadius: 10, background: 'linear-gradient(135deg,var(--accent-cyan),var(--accent-purple))', border: 'none', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!rect || rect.w < 10) ? 0.5 : 1 }}>Analyze Selection</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Footer ───────────────────────────────────────────────────────────────────
 function Footer() {
   const tech = ['PyTorch', 'EfficientNet B0', 'Next.js 16', 'FastAPI', 'OpenCV'];
@@ -389,17 +752,31 @@ function Footer() {
 let toastCounter = 0;
 
 export default function Home() {
+  const { theme, toggle: toggleTheme } = useTheme();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('scan_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Restore timestamps as Date objects
+        return parsed.map((h: HistoryItem & { timestamp: string }) => ({ ...h, timestamp: new Date(h.timestamp) }));
+      }
+    } catch { /* ignore */ }
+    return [];
+  });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [copied, setCopied] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [showUrlDialog, setShowUrlDialog] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
+  const [cropMode, setCropMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const ripple = useRipple();
 
@@ -427,9 +804,80 @@ export default function Home() {
     return () => document.removeEventListener('paste', onPaste);
   }, [handleFile, addToast]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); };
-  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]); };
-  const clearFile = () => { setFile(null); setPreview(null); setResult(null); setError(null); };
+  // Enter key → Analyze
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && file && !loading && !result && !cropMode && !showUrlDialog) {
+        handleUpload();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, loading, result, cropMode, showUrlDialog]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    if (files.length === 1) {
+      handleFile(files[0]);
+    } else {
+      // Batch mode
+      const items: BatchItem[] = files.map((f, i) => ({
+        id: i, file: f, preview: null, result: null, loading: false, error: null,
+      }));
+      // Generate previews
+      items.forEach((item, i) => {
+        if (item.file.type.startsWith('image/')) {
+          const r = new FileReader();
+          r.onload = ev => setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, preview: ev.target?.result as string } : b));
+          r.readAsDataURL(item.file);
+        }
+      });
+      setBatchItems(items);
+      addToast(`📦 ${files.length} files loaded for batch analysis`, 'info');
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 1) handleFile(files[0]);
+    else if (files.length > 1) {
+      const items: BatchItem[] = files.map((f, i) => ({ id: i, file: f, preview: null, result: null, loading: false, error: null }));
+      files.forEach((f, i) => {
+        if (f.type.startsWith('image/')) {
+          const r = new FileReader(); r.onload = ev => setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, preview: ev.target?.result as string } : b));
+          r.readAsDataURL(f);
+        }
+      });
+      setBatchItems(items);
+      addToast(`📦 ${files.length} files dropped for batch analysis`, 'info');
+    }
+  };
+
+  const clearFile = () => { setFile(null); setPreview(null); setResult(null); setError(null); setBatchItems([]); };
+
+  // Batch analyze all
+  const handleBatchAnalyze = async () => {
+    const promises = batchItems.map(async (item, i) => {
+      setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, loading: true } : b));
+      const fd = new FormData(); fd.append('file', item.file);
+      const endpoint = item.file.type.startsWith('video/') ? 'http://localhost:8000/analyze-video' : 'http://localhost:8000/analyze-image';
+      try {
+        const res = await fetch(endpoint, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        if (data.status === 'error') throw new Error(data.message || 'No face');
+        setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, loading: false, result: data } : b));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Error';
+        setBatchItems(prev => prev.map((b, idx) => idx === i ? { ...b, loading: false, error: msg } : b));
+      }
+    });
+    await Promise.all(promises);
+    addToast('✅ Batch analysis complete!', 'success');
+  };
 
   // Load from URL
   const handleUrlLoad = async (url: string) => {
@@ -455,8 +903,13 @@ export default function Home() {
       const res = await fetch(endpoint, { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+      if (data.status === 'error') throw new Error(data.message || 'Analysis failed');
       setResult(data);
-      setHistory(prev => [{ id: Date.now(), filename: file.name, result: data, timestamp: new Date(), preview: preview ?? undefined }, ...prev].slice(0, 5));
+      setHistory(prev => {
+        const next = [{ id: Date.now(), filename: file.name, result: data, timestamp: new Date(), preview: preview ?? undefined }, ...prev].slice(0, 10);
+        try { localStorage.setItem('scan_history', JSON.stringify(next)); } catch { /* ignore */ }
+        return next;
+      });
       addToast(data.prediction === 'Fake' ? '❌ Deepfake detected!' : '✅ Media appears authentic', data.prediction === 'Fake' ? 'error' : 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
@@ -483,6 +936,13 @@ export default function Home() {
     } catch { addToast('Export requires: npm install html2canvas', 'error'); }
   };
 
+  const handleCropResult = (blob: Blob) => {
+    setCropMode(false);
+    const f = new File([blob], 'cropped-region.jpg', { type: 'image/jpeg' });
+    handleFile(f);
+    addToast('✂️ Cropped region loaded — click Analyze!', 'info');
+  };
+
   const isFake = result?.prediction === 'Fake';
 
   return (
@@ -491,9 +951,11 @@ export default function Home() {
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       {lightbox && preview && <Lightbox src={preview} onClose={() => setLightbox(false)} />}
       {showUrlDialog && <UrlDialog onClose={() => setShowUrlDialog(false)} onLoad={handleUrlLoad} />}
-      <Navbar />
+      {cropMode && preview && <CropOverlay src={preview} onCrop={handleCropResult} onCancel={() => setCropMode(false)} />}
+      <PwaBanner />
+      <Navbar theme={theme} toggleTheme={toggleTheme} compareMode={compareMode} setCompareMode={setCompareMode} />
 
-      <main style={{ minHeight: '100vh', padding: '88px 16px 0 16px', maxWidth: 700, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+      <main style={{ minHeight: '100vh', padding: '88px 16px 0 16px', maxWidth: compareMode ? 1100 : 700, margin: '0 auto', position: 'relative', zIndex: 1, transition: 'max-width 0.4s ease' }}>
 
         {/* Hero */}
         <div style={{ textAlign: 'center', marginBottom: 36 }} className="animate-fade-slide-up">
@@ -514,135 +976,174 @@ export default function Home() {
         </div>
 
         {/* Stats */}
-        <StatsStrip />
+        {!compareMode && <StatsStrip />}
 
-        {/* Drop Zone */}
-        {!file && (
-          <div className={`dropzone animate-fade-slide-up ${isDragOver ? 'drag-over' : ''}`} onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setIsDragOver(true); }} onDragLeave={() => setIsDragOver(false)} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} id="file-dropzone" aria-label="Upload media file">
-            <input ref={inputRef} type="file" accept="image/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} id="file-upload-input" />
-            <div style={{ pointerEvents: 'none' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px', background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.15))', border: '1px solid rgba(6,182,212,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <UploadIcon style={{ width: 28, height: 28, color: 'var(--accent-cyan)' }} />
-              </div>
-              <p style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>{isDragOver ? '🎯 Drop it here!' : 'Drop your file here'}</p>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>or <span style={{ color: 'var(--accent-cyan)', fontWeight: 500 }}>click to browse</span> · or <span style={{ color: 'var(--accent-purple)', fontWeight: 500 }}>Ctrl+V to paste</span></p>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Images (JPG, PNG, WEBP) · Videos (MP4, MOV)</p>
+        {/* ── COMPARE MODE ── */}
+        {compareMode && (
+          <div className="animate-fade-slide-up">
+            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Upload one image to each panel and analyze side-by-side</p>
+            <p className="compare-mobile-note" style={{ textAlign: 'center', fontSize: 11, color: '#f59e0b', marginBottom: 16, display: 'none' }}>💡 Compare mode works best on a wider screen</p>
+            <div className="compare-container">
+              <ComparePanel label="Image A" addToast={addToast} />
+              <ComparePanel label="Image B" addToast={addToast} />
             </div>
           </div>
         )}
 
-        {/* File Card */}
-        {file && (
-          <div className="glass-card animate-fade-slide-up" style={{ overflow: 'hidden' }}>
-            {preview && (
-              <div style={{ position: 'relative', height: 280, overflow: 'hidden', borderRadius: '15px 15px 0 0', cursor: 'zoom-in' }} onClick={() => !loading && setLightbox(true)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={preview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(5,5,8,0.85) 0%, transparent 55%)' }} />
-                {!loading && <div style={{ position: 'absolute', top: 12, right: 12, padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>🔍 Click to zoom</div>}
-                {loading && <>
-                  <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(6,182,212,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.12) 1px, transparent 1px)', backgroundSize: '28px 28px', animation: 'scanPulse 1.4s ease-in-out infinite' }} />
-                  <div style={{ position: 'absolute', left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.9) 30%, rgba(139,92,246,0.9) 70%, transparent 100%)', boxShadow: '0 0 20px rgba(6,182,212,0.8)', animation: 'scanLine 1.8s ease-in-out infinite' }} />
-                  <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 999, background: 'rgba(6,182,212,0.2)', border: '1px solid rgba(6,182,212,0.4)', fontSize: 11, fontWeight: 600, color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#06b6d4', animation: 'scanPulse 0.8s ease-in-out infinite' }} />SCANNING
+        {/* ── NORMAL MODE ── */}
+        {!compareMode && (
+          <>
+            {/* Drop Zone */}
+            {!file && batchItems.length === 0 && (
+              <div className={`dropzone animate-fade-slide-up ${isDragOver ? 'drag-over' : ''}`} onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setIsDragOver(true); }} onDragLeave={() => setIsDragOver(false)} onClick={() => inputRef.current?.click()} role="button" tabIndex={0} id="file-dropzone" aria-label="Upload media file">
+                <input ref={inputRef} type="file" accept="image/*,video/*" multiple onChange={handleFileChange} style={{ display: 'none' }} id="file-upload-input" />
+                <div style={{ pointerEvents: 'none' }}>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px', background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.15))', border: '1px solid rgba(6,182,212,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <UploadIcon style={{ width: 28, height: 28, color: 'var(--accent-cyan)' }} />
                   </div>
-                </>}
-              </div>
-            )}
-            {!preview && (
-              <div style={{ padding: '28px 24px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid var(--border)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><VideoIcon style={{ width: 24, height: 24, color: 'var(--accent-purple)' }} /></div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: loading ? 8 : 2 }}>{file.name}</p>
-                  {loading ? <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}><div style={{ height: '100%', width: '60%', borderRadius: 999, background: 'linear-gradient(90deg,#06b6d4,#8b5cf6,#06b6d4)', backgroundSize: '200% 100%', animation: 'gradientShift 1.5s ease infinite' }} /></div>
-                    : <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Video</p>}
+                  <p style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>{isDragOver ? '🎯 Drop it here!' : 'Drop your file here'}</p>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>or <span style={{ color: 'var(--accent-cyan)', fontWeight: 500 }}>click to browse</span> · or <span style={{ color: 'var(--accent-purple)', fontWeight: 500 }}>Ctrl+V to paste</span></p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Images (JPG, PNG, WEBP) · Videos (MP4, MOV) · <span style={{ color: 'var(--accent-cyan)' }}>Drop multiple for batch!</span></p>
                 </div>
               </div>
             )}
-            {loading && !preview && (
-              <div style={{ padding: '28px', textAlign: 'center' }}>
-                <div style={{ display: 'inline-block', position: 'relative', width: 52, height: 52, marginBottom: 14 }}>
-                  <div style={{ width: 52, height: 52, borderRadius: '50%', border: '3px solid rgba(6,182,212,0.15)', borderTopColor: 'var(--accent-cyan)' }} className="animate-spin-slow" />
-                  <div style={{ position: 'absolute', inset: 7, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.15)', borderBottomColor: 'var(--accent-purple)', animation: 'spin 2s linear infinite reverse' }} />
+
+            {/* Batch Mode */}
+            {batchItems.length > 0 && (
+              <div className="animate-fade-slide-up glass-card" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>📦 Batch Analysis — {batchItems.length} files</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="glow-button ripple-btn" onClick={handleBatchAnalyze} style={{ width: 'auto', padding: '8px 20px', fontSize: 13 }}>Analyze All</button>
+                    <button onClick={clearFile} style={{ padding: '8px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>Clear</button>
+                  </div>
                 </div>
-                <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Scanning for deepfakes...</p>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Analyzing frames and AI artifacts</p>
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16 }}>
-                  {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-cyan)', animation: `scanPulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />)}
+                <BatchResultsGrid items={batchItems} />
+              </div>
+            )}
+
+            {/* File Card */}
+            {file && (
+              <div className="glass-card animate-fade-slide-up" style={{ overflow: 'hidden' }}>
+                {preview && (
+                  <div style={{ position: 'relative', height: 280, overflow: 'hidden', borderRadius: '15px 15px 0 0', cursor: 'zoom-in' }} onClick={() => !loading && setLightbox(true)}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={preview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(5,5,8,0.85) 0%, transparent 55%)' }} />
+                    {!loading && <div style={{ position: 'absolute', top: 12, right: 12, padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>🔍 Click to zoom</div>}
+                    {/* Crop region button */}
+                    {!loading && !result && (
+                      <button onClick={e => { e.stopPropagation(); setCropMode(true); }} style={{ position: 'absolute', bottom: 12, right: 12, padding: '5px 12px', borderRadius: 8, background: 'rgba(6,182,212,0.2)', border: '1px solid rgba(6,182,212,0.4)', color: '#06b6d4', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                        ✂️ Select Region
+                      </button>
+                    )}
+                    {loading && <>
+                      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(6,182,212,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.12) 1px, transparent 1px)', backgroundSize: '28px 28px', animation: 'scanPulse 1.4s ease-in-out infinite' }} />
+                      <div style={{ position: 'absolute', left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.9) 30%, rgba(139,92,246,0.9) 70%, transparent 100%)', boxShadow: '0 0 20px rgba(6,182,212,0.8)', animation: 'scanLine 1.8s ease-in-out infinite' }} />
+                      <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 999, background: 'rgba(6,182,212,0.2)', border: '1px solid rgba(6,182,212,0.4)', fontSize: 11, fontWeight: 600, color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#06b6d4', animation: 'scanPulse 0.8s ease-in-out infinite' }} />SCANNING
+                      </div>
+                    </>}
+                  </div>
+                )}
+                {!preview && (
+                  <div style={{ padding: '28px 24px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><VideoIcon style={{ width: 24, height: 24, color: 'var(--accent-purple)' }} /></div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: loading ? 8 : 2 }}>{file.name}</p>
+                      {loading ? <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}><div style={{ height: '100%', width: '60%', borderRadius: 999, background: 'linear-gradient(90deg,#06b6d4,#8b5cf6,#06b6d4)', backgroundSize: '200% 100%', animation: 'gradientShift 1.5s ease infinite' }} /></div>
+                        : <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Video</p>}
+                    </div>
+                  </div>
+                )}
+                {loading && !preview && (
+                  <div style={{ padding: '28px', textAlign: 'center' }}>
+                    <div style={{ display: 'inline-block', position: 'relative', width: 52, height: 52, marginBottom: 14 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: '50%', border: '3px solid rgba(6,182,212,0.15)', borderTopColor: 'var(--accent-cyan)' }} className="animate-spin-slow" />
+                      <div style={{ position: 'absolute', inset: 7, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.15)', borderBottomColor: 'var(--accent-purple)', animation: 'spin 2s linear infinite reverse' }} />
+                    </div>
+                    <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Scanning for deepfakes...</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Analyzing frames and AI artifacts</p>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 16 }}>
+                      {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-cyan)', animation: `scanPulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />)}
+                    </div>
+                  </div>
+                )}
+                {!loading && !result && (
+                  <div style={{ padding: '18px 24px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 500, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{file.type.startsWith('video/') ? 'Video' : 'Image'} · {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <button id="clear-file-btn" className="ripple-btn" onClick={(e) => { ripple(e); clearFile(); }} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>Remove</button>
+                    <button id="analyze-btn" className="glow-button ripple-btn" onClick={(e) => { ripple(e); handleUpload(); }} style={{ width: 'auto', padding: '10px 26px', fontSize: 14 }}>Analyze</button>
+                  </div>
+                )}
+                {error && !loading && (
+                  <div style={{ margin: '0 20px 20px', padding: '14px 16px', borderRadius: 12, background: 'rgba(244,63,94,0.06)', border: '1px solid rgba(244,63,94,0.2)' }}>
+                    <p style={{ fontWeight: 600, color: '#f43f5e', marginBottom: 4, fontSize: 14 }}>⚠ Analysis Failed</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{error}</p>
+                    <button onClick={clearFile} style={{ marginTop: 8, fontSize: 13, color: 'var(--accent-cyan)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>← Try again</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Results — 3D flip-in */}
+            {result && !loading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="flip-in flip-in-1" style={{ padding: '32px 28px', borderRadius: 20, textAlign: 'center', background: isFake ? 'rgba(244,63,94,0.06)' : 'rgba(16,185,129,0.06)', border: `1px solid ${isFake ? 'rgba(244,63,94,0.2)' : 'rgba(16,185,129,0.2)'}`, boxShadow: isFake ? '0 0 60px rgba(244,63,94,0.08)' : '0 0 60px rgba(16,185,129,0.08)' }}>
+                  <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 12 }}>Verdict</p>
+                  <p className={isFake ? 'verdict-fake' : 'verdict-real'} style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>{isFake ? '❌ FAKE' : '✅ REAL'}</p>
+                  <p style={{ marginTop: 12, fontSize: 14, color: 'var(--text-secondary)' }}>{isFake ? 'This media shows signs of AI manipulation or deepfake generation.' : 'This media appears to be authentic with no deepfake indicators found.'}</p>
+                </div>
+
+                <div className="glass-card flip-in flip-in-2" style={{ padding: '24px' }}>
+                  <div className="result-gauge-row" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                    <CircularGauge probability={result.fake_probability} isFake={isFake} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
+                      <ConfidenceBar probability={result.fake_probability} isFake={isFake} />
+                      <RiskMeter probability={result.fake_probability} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flip-in flip-in-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="glass-card" style={{ padding: '20px', textAlign: 'center' }}>
+                    <Tip text={result.frames_analyzed ? 'Number of video frames sampled for analysis' : 'Number of faces found in the image'}>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, cursor: 'help', borderBottom: '1px dashed rgba(255,255,255,0.1)', display: 'inline-block' }}>{result.frames_analyzed ? 'Frames Analyzed' : 'Faces Detected'} ⓘ</p>
+                    </Tip>
+                    <p style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}><AnimatedNumber value={result.frames_analyzed ?? result.faces_detected ?? 0} /></p>
+                  </div>
+                  <div className="glass-card" style={{ padding: '20px', textAlign: 'center' }}>
+                    <Tip text="Raw model output: probability this media is AI-generated (0–100%)">
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, cursor: 'help', borderBottom: '1px dashed rgba(255,255,255,0.1)', display: 'inline-block' }}>Fake Probability ⓘ</p>
+                    </Tip>
+                    <p style={{ fontSize: 32, fontWeight: 800, color: isFake ? 'var(--fake-color)' : 'var(--real-color)', lineHeight: 1 }}><AnimatedNumber value={parseFloat((result.fake_probability * 100).toFixed(1))} suffix="%" /></p>
+                  </div>
+                </div>
+
+                {/* Share Card + Export */}
+                <div className="flip-in flip-in-4">
+                  {file && <ShareCard result={result} filename={file.name} onExport={exportPng} />}
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button id="copy-results-btn" className="ripple-btn" onClick={(e) => { ripple(e); copyResults(); }} style={{ flex: 1, padding: '13px', borderRadius: 12, background: copied ? 'rgba(6,182,212,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${copied ? 'rgba(6,182,212,0.35)' : 'rgba(255,255,255,0.08)'}`, color: copied ? 'var(--accent-cyan)' : 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer', transition: 'all 0.3s' }}>
+                    {copied ? '✓ Copied!' : '📋 Copy Results'}
+                  </button>
+                  <button id="analyze-another-btn" className="ripple-btn" onClick={(e) => { ripple(e); clearFile(); }} style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+                    ← Analyze Another
+                  </button>
                 </div>
               </div>
             )}
-            {!loading && !result && (
-              <div style={{ padding: '18px 24px', display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 500, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{file.type.startsWith('video/') ? 'Video' : 'Image'} · {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-                <button id="clear-file-btn" className="ripple-btn" onClick={(e) => { ripple(e); clearFile(); }} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>Remove</button>
-                <button id="analyze-btn" className="glow-button ripple-btn" onClick={(e) => { ripple(e); handleUpload(); }} style={{ width: 'auto', padding: '10px 26px', fontSize: 14 }}>Analyze</button>
-              </div>
-            )}
-            {error && !loading && (
-              <div style={{ margin: '0 20px 20px', padding: '14px 16px', borderRadius: 12, background: 'rgba(244,63,94,0.06)', border: '1px solid rgba(244,63,94,0.2)' }}>
-                <p style={{ fontWeight: 600, color: '#f43f5e', marginBottom: 4, fontSize: 14 }}>⚠ Analysis Failed</p>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{error}</p>
-                <button onClick={clearFile} style={{ marginTop: 8, fontSize: 13, color: 'var(--accent-cyan)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>← Try again</button>
-              </div>
-            )}
-          </div>
+
+            <HistoryPanel history={history} />
+            {!result && !loading && batchItems.length === 0 && <HowItWorks />}
+          </>
         )}
-
-        {/* Results */}
-        {result && !loading && (
-          <div className="animate-fade-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ padding: '32px 28px', borderRadius: 20, textAlign: 'center', background: isFake ? 'rgba(244,63,94,0.06)' : 'rgba(16,185,129,0.06)', border: `1px solid ${isFake ? 'rgba(244,63,94,0.2)' : 'rgba(16,185,129,0.2)'}`, boxShadow: isFake ? '0 0 60px rgba(244,63,94,0.08)' : '0 0 60px rgba(16,185,129,0.08)' }}>
-              <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 12 }}>Verdict</p>
-              <p className={isFake ? 'verdict-fake' : 'verdict-real'} style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>{isFake ? '❌ FAKE' : '✅ REAL'}</p>
-              <p style={{ marginTop: 12, fontSize: 14, color: 'var(--text-secondary)' }}>{isFake ? 'This media shows signs of AI manipulation or deepfake generation.' : 'This media appears to be authentic with no deepfake indicators found.'}</p>
-            </div>
-
-            <div className="glass-card" style={{ padding: '24px' }}>
-              <div className="result-gauge-row" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-                <CircularGauge probability={result.fake_probability} isFake={isFake} />
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
-                  <ConfidenceBar probability={result.fake_probability} isFake={isFake} />
-                  <RiskMeter probability={result.fake_probability} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div className="glass-card" style={{ padding: '20px', textAlign: 'center' }}>
-                <Tip text={result.frames_analyzed ? 'Number of video frames sampled for analysis' : 'Number of faces found in the image'}>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, cursor: 'help', borderBottom: '1px dashed rgba(255,255,255,0.1)', display: 'inline-block' }}>{result.frames_analyzed ? 'Frames Analyzed' : 'Faces Detected'} ⓘ</p>
-                </Tip>
-                <p style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}><AnimatedNumber value={result.frames_analyzed ?? result.faces_detected ?? 0} /></p>
-              </div>
-              <div className="glass-card" style={{ padding: '20px', textAlign: 'center' }}>
-                <Tip text="Raw model output: probability this media is AI-generated (0–100%)">
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, cursor: 'help', borderBottom: '1px dashed rgba(255,255,255,0.1)', display: 'inline-block' }}>Fake Probability ⓘ</p>
-                </Tip>
-                <p style={{ fontSize: 32, fontWeight: 800, color: isFake ? 'var(--fake-color)' : 'var(--real-color)', lineHeight: 1 }}><AnimatedNumber value={parseFloat((result.fake_probability * 100).toFixed(1))} suffix="%" /></p>
-              </div>
-            </div>
-
-            {/* Share Card + Export */}
-            {file && <ShareCard result={result} filename={file.name} onExport={exportPng} />}
-
-            {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button id="copy-results-btn" className="ripple-btn" onClick={(e) => { ripple(e); copyResults(); }} style={{ flex: 1, padding: '13px', borderRadius: 12, background: copied ? 'rgba(6,182,212,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${copied ? 'rgba(6,182,212,0.35)' : 'rgba(255,255,255,0.08)'}`, color: copied ? 'var(--accent-cyan)' : 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer', transition: 'all 0.3s' }}>
-                {copied ? '✓ Copied!' : '📋 Copy Results'}
-              </button>
-              <button id="analyze-another-btn" className="ripple-btn" onClick={(e) => { ripple(e); clearFile(); }} style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-                ← Analyze Another
-              </button>
-            </div>
-          </div>
-        )}
-
-        <HistoryPanel history={history} />
-        {!result && !loading && <HowItWorks />}
       </main>
 
       <Footer />

@@ -5,12 +5,9 @@ from ml.detector import DeepfakeDetector
 class MLPipeline:
     def __init__(self):
         import torch
-        if torch.cuda.is_available():
-            self.device = 'cuda'
-        elif torch.backends.mps.is_available():
-            self.device = 'mps'
-        else:
-            self.device = 'cpu'
+        # FORCE CPU globally to avoid MPS AdaptiveAvgPool2d bugs in both MTCNN and EfficientNet.
+        # MPS fallback is currently unreliable in this PyTorch version for these ops.
+        self.device = 'cpu'
         
         self.extractor = FaceExtractor(device=self.device)
         
